@@ -4751,12 +4751,20 @@ int64_t whisper_full_get_segment_t0(struct whisper_context * ctx, int i_segment)
     return ctx->state->result_all[i_segment].t0;
 }
 
+int64_t whisper_full_get_token_t0(struct whisper_context * ctx, int i_segment, int i_token) {
+    return ctx->state->result_all[i_segment].tokens[i_token].t0;
+}
+
 int64_t whisper_full_get_segment_t1_from_state(struct whisper_state * state, int i_segment) {
     return state->result_all[i_segment].t1;
 }
 
 int64_t whisper_full_get_segment_t1(struct whisper_context * ctx, int i_segment) {
     return ctx->state->result_all[i_segment].t1;
+}
+
+int64_t whisper_full_get_token_t1(struct whisper_context * ctx, int i_segment, int i_token) {
+    return ctx->state->result_all[i_segment].tokens[i_token].t1;
 }
 
 const char * whisper_full_get_segment_text_from_state(struct whisper_state * state, int i_segment) {

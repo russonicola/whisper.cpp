@@ -456,9 +456,11 @@ extern "C" {
     // Get the start and end time of the specified segment
     WHISPER_API int64_t whisper_full_get_segment_t0           (struct whisper_context * ctx, int i_segment);
     WHISPER_API int64_t whisper_full_get_segment_t0_from_state(struct whisper_state * state, int i_segment);
+    WHISPER_API int64_t whisper_full_get_token_t0(struct whisper_context * ctx, int i_segment, int i_token);
 
     WHISPER_API int64_t whisper_full_get_segment_t1           (struct whisper_context * ctx, int i_segment);
     WHISPER_API int64_t whisper_full_get_segment_t1_from_state(struct whisper_state * state, int i_segment);
+    WHISPER_API int64_t whisper_full_get_token_t1(struct whisper_context * ctx, int i_segment, int i_token);
 
     // Get the text of the specified segment
     WHISPER_API const char * whisper_full_get_segment_text           (struct whisper_context * ctx, int i_segment);
