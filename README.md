@@ -658,3 +658,15 @@ If you have any kind of feedback about this project feel free to use the Discuss
 You can use the [Show and tell](https://github.com/ggerganov/whisper.cpp/discussions/categories/show-and-tell) category
 to share your own projects that use `whisper.cpp`. If you have a question, make sure to check the
 [Frequently asked questions (#126)](https://github.com/ggerganov/whisper.cpp/discussions/126) discussion.
+
+
+## Usage of detailed JSON output
+
+#### Download the desired model as mentioned before
+bash ./models/download-ggml-model.sh large.en
+
+#### Build the main example
+make
+
+#### Transcribe WAV file with detailed JSON output and word-level timings
+./main -m ./models/ggml-large.bin -f samples/jfk.wav -l en -ojd -sow -nt -owts
