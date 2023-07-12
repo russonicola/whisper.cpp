@@ -9,6 +9,10 @@
 #include <thread>
 #include <vector>
 #include <cstring>
+#include <regex>
+
+#include <iostream>
+using namespace std;
 
 #if defined(_MSC_VER)
 #pragma warning(disable: 4244 4267) // possible loss of data
@@ -80,11 +84,13 @@ struct whisper_params {
     bool output_wts     = false;
     bool output_csv     = false;
     bool output_jsn     = false;
+    bool output_jsn_detailed     = false;
     bool output_lrc     = false;
     bool print_special  = false;
     bool print_colors   = false;
     bool print_progress = false;
     bool no_timestamps  = false;
+    
 
     std::string language = "en";
     std::string prompt;
@@ -140,6 +146,7 @@ bool whisper_params_parse(int argc, char ** argv, whisper_params & params) {
         else if (arg == "-fp"   || arg == "--font-path")      { params.font_path      = argv[++i]; }
         else if (arg == "-ocsv" || arg == "--output-csv")     { params.output_csv     = true; }
         else if (arg == "-oj"   || arg == "--output-json")    { params.output_jsn     = true; }
+        else if (arg == "-ojd"   || arg == "--output-json-detailed")    { params.output_jsn_detailed     = true; }
         else if (arg == "-of"   || arg == "--output-file")    { params.fname_out.emplace_back(argv[++i]); }
         else if (arg == "-ps"   || arg == "--print-special")  { params.print_special  = true; }
         else if (arg == "-pc"   || arg == "--print-colors")   { params.print_colors   = true; }
@@ -191,6 +198,7 @@ void whisper_print_usage(int /*argc*/, char ** argv, const whisper_params & para
     fprintf(stderr, "  -fp,       --font-path         [%-7s] path to a monospace font for karaoke video\n",     params.font_path.c_str());
     fprintf(stderr, "  -ocsv,     --output-csv        [%-7s] output result in a CSV file\n",                    params.output_csv ? "true" : "false");
     fprintf(stderr, "  -oj,       --output-json       [%-7s] output result in a JSON file\n",                   params.output_jsn ? "true" : "false");
+    fprintf(stderr, "  -ojd,      --output-json-detailed       [%-7s] detailed output result in a JSON file\n",                   params.output_jsn_detailed ? "true" : "false");
     fprintf(stderr, "  -of FNAME, --output-file FNAME [%-7s] output file path (without file extension)\n",      "");
     fprintf(stderr, "  -ps,       --print-special     [%-7s] print special tokens\n",                           params.print_special ? "true" : "false");
     fprintf(stderr, "  -pc,       --print-colors      [%-7s] print colors\n",                                   params.print_colors ? "true" : "false");
@@ -288,7 +296,7 @@ void whisper_print_segment_callback(struct whisper_context * ctx, struct whisper
                 const float  p    = whisper_full_get_token_p   (ctx, i, j);
 
                 const int col = std::max(0, std::min((int) k_colors.size() - 1, (int) (std::pow(p, 3)*float(k_colors.size()))));
-
+                printf("%d", col);
                 printf("%s%s%s%s", speaker.c_str(), k_colors[col].c_str(), text, "\033[0m");
             }
         } else {
@@ -359,8 +367,35 @@ bool output_vtt(struct whisper_context * ctx, const char * fname, const whisper_
         }
 
         fout << to_timestamp(t0) << " --> " << to_timestamp(t1) << "\n";
-        fout << speaker << text << "\n\n";
+        fout << speaker << text << "\n";
+        
+        
+        
+        //-------- TEST CONFIDENCE --------
+        for (int j = 0; j < whisper_full_n_tokens(ctx, i); ++j) {
+            if (params.print_special == false) {
+                const whisper_token id = whisper_full_get_token_id(ctx, i, j);
+                if (id >= whisper_token_eot(ctx)) {
+                    continue;
+                }
+            }
+
+            const char * text = whisper_full_get_token_text(ctx, i, j);
+            const float  p    = whisper_full_get_token_p   (ctx, i, j);
+
+            const int col = std::max(0, std::min((int) k_colors.size() - 1, (int) (std::pow(p, 3)*float(k_colors.size()))));
+            
+            fout << "<v Confidence_p>" << p << "\n";
+            fout << "<v Confidence>" << col << "\n\n";
+            
+            //printf("%d", col);
+            //printf("%s%s%s%s", speaker.c_str(), k_colors[col].c_str(), text, "\033[0m");
+        }
+        //-------- TEST CONFIDENCE --------
+        
     }
+    
+    
 
     return true;
 }
@@ -440,7 +475,7 @@ bool output_csv(struct whisper_context * ctx, const char * fname, const whisper_
     {
         fout << "speaker,";
     }
-    fout << "text\n";
+    fout << "text,confidence,color\n";
 
     for (int i = 0; i < n_segments; ++i) {
         const char * text = whisper_full_get_segment_text(ctx, i);
@@ -454,7 +489,39 @@ bool output_csv(struct whisper_context * ctx, const char * fname, const whisper_
         {
             fout << estimate_diarization_speaker(pcmf32s, t0, t1, true) << ",";
         }
-        fout << "\"" << text_escaped << "\"\n";
+        fout << "\"" << text_escaped << "\",";
+        
+        string txt = text_escaped;
+        
+        
+        if (txt==""){
+            fout << ",\n";
+            continue;
+        }
+        
+        
+        //-------- TEST CONFIDENCE --------
+        for (int j = 0; j < whisper_full_n_tokens(ctx, i); ++j) {
+            if (params.print_special == false) {
+                const whisper_token id = whisper_full_get_token_id(ctx, i, j);
+                if (id >= whisper_token_eot(ctx)) {
+                    continue;
+                }
+            }
+
+            const char * token = whisper_full_get_token_text(ctx, i, j);
+            const float  p    = whisper_full_get_token_p   (ctx, i, j);
+
+            const int col = std::max(0, std::min((int) k_colors.size() - 1, (int) (std::pow(p, 3)*float(k_colors.size()))));
+            
+            fout << p << "," << col << "\n";
+            
+            
+        }
+        
+        //-------- TEST CONFIDENCE --------
+        
+        
     }
 
     return true;
@@ -518,6 +585,12 @@ bool output_json(struct whisper_context * ctx, const char * fname, const whisper
         end_value(end);
     };
 
+    auto value_f = [&](const char *name, const float val, bool end) {
+        start_value(name);
+        fout << val;
+        end_value(end);
+    };
+
     auto value_b = [&](const char *name, const bool val, bool end) {
         start_value(name);
         fout << (val ? "true" : "false");
@@ -576,11 +649,36 @@ bool output_json(struct whisper_context * ctx, const char * fname, const whisper
                         value_i("from", t0 * 10, false);
                         value_i("to", t1 * 10, true);
                     end_obj(false);
+                    value_f("start", t0 * 0.001, false);
+                    value_f("end", t1 * 0.001, false);
+                    
+
+                    //-------- TEST CONFIDENCE --------
+                    for (int j = 0; j < whisper_full_n_tokens(ctx, i); ++j) {
+                        if (params.print_special == false) {
+                            const whisper_token id = whisper_full_get_token_id(ctx, i, j);
+                            if (id >= whisper_token_eot(ctx)) {
+                                continue;
+                            }
+                        }
+
+                        const char * token = whisper_full_get_token_text(ctx, i, j);
+                        const float  p    = whisper_full_get_token_p   (ctx, i, j);
+
+                        const int col = std::max(0, std::min((int) k_colors.size() - 1, (int) (std::pow(p, 3)*float(k_colors.size()))));
+                        
+                        value_f("confidence", p, false);
+                        value_i("color", col, false);
+                        
+                    }
+                    
+                    //-------- TEST CONFIDENCE --------
                     value_s("text", text, !params.diarize);
 
                     if (params.diarize && pcmf32s.size() == 2) {
                         value_s("speaker", estimate_diarization_speaker(pcmf32s, t0, t1, true).c_str(), true);
                     }
+
                 end_obj(i == (n_segments - 1));
             }
 
@@ -588,6 +686,236 @@ bool output_json(struct whisper_context * ctx, const char * fname, const whisper
     end_obj(true);
     return true;
 }
+
+
+
+bool output_json_detailed(struct whisper_context * ctx, const char * fname, const whisper_params & params, std::vector<std::vector<float>> pcmf32s) {
+    std::ofstream fout(fname);
+    int indent = 0;
+
+    auto doindent = [&]() {
+        for (int i = 0; i < indent; i++) fout << "\t";
+    };
+
+    auto start_arr = [&](const char *name) {
+        doindent();
+        fout << "\"" << name << "\": [\n";
+        indent++;
+    };
+
+    auto end_arr = [&](bool end) {
+        indent--;
+        doindent();
+        fout << (end ? "]\n" : "},\n");
+    };
+
+    auto start_obj = [&](const char *name) {
+        doindent();
+        if (name) {
+            fout << "\"" << name << "\": {\n";
+        } else {
+            fout << "{\n";
+        }
+        indent++;
+    };
+
+    auto end_obj = [&](bool end) {
+        indent--;
+        doindent();
+        fout << (end ? "}\n" : "},\n");
+    };
+
+    auto start_value = [&](const char *name) {
+        doindent();
+        fout << "\"" << name << "\": ";
+    };
+
+    auto value_s = [&](const char *name, const char *val, bool end) {
+        start_value(name);
+        char * val_escaped = escape_double_quotes_and_backslashes(val);
+        fout << "\"" << val_escaped << (end ? "\"\n" : "\",\n");
+        free(val_escaped);
+    };
+
+    auto end_value = [&](bool end) {
+        fout << (end ? "\n" : ",\n");
+    };
+
+    auto value_i = [&](const char *name, const int64_t val, bool end) {
+        start_value(name);
+        fout << val;
+        end_value(end);
+    };
+
+    auto value_f = [&](const char *name, const float val, bool end) {
+        start_value(name);
+        fout << val;
+        end_value(end);
+    };
+
+    auto value_b = [&](const char *name, const bool val, bool end) {
+        start_value(name);
+        fout << (val ? "true" : "false");
+        end_value(end);
+    };
+
+    if (!fout.is_open()) {
+        fprintf(stderr, "%s: failed to open '%s' for writing\n", __func__, fname);
+        return false;
+    }
+
+    fprintf(stderr, "%s: saving output to '%s'\n", __func__, fname);
+    start_obj(nullptr);
+        /* value_s("systeminfo", whisper_print_system_info(), false);
+        start_obj("model");
+            value_s("type", whisper_model_type_readable(ctx), false);
+            value_b("multilingual", whisper_is_multilingual(ctx), false);
+            value_i("vocab", whisper_model_n_vocab(ctx), false);
+            start_obj("audio");
+                value_i("ctx", whisper_model_n_audio_ctx(ctx), false);
+                value_i("state", whisper_model_n_audio_state(ctx), false);
+                value_i("head", whisper_model_n_audio_head(ctx), false);
+                value_i("layer", whisper_model_n_audio_layer(ctx), true);
+            end_obj(false);
+            start_obj("text");
+                value_i("ctx", whisper_model_n_text_ctx(ctx), false);
+                value_i("state", whisper_model_n_text_state(ctx), false);
+                value_i("head", whisper_model_n_text_head(ctx), false);
+                value_i("layer", whisper_model_n_text_layer(ctx), true);
+            end_obj(false);
+            value_i("mels", whisper_model_n_mels(ctx), false);
+            value_i("ftype", whisper_model_ftype(ctx), true);
+        end_obj(false);
+        start_obj("params");
+            value_s("model", params.model.c_str(), false);
+            value_s("language", params.language.c_str(), false);
+            value_b("translate", params.translate, true);
+        end_obj(false);
+        start_obj("result");
+            value_s("language", whisper_lang_str(whisper_full_lang_id(ctx)), true);
+        end_obj(false); */
+
+
+        const int n_segments_full = whisper_full_n_segments(ctx);
+            string full_text = "";
+            for (int i = 0; i < n_segments_full; ++i) {
+                const char * txt_full = whisper_full_get_segment_text(ctx, i);
+                full_text += txt_full;
+            }
+        value_s("text", full_text.c_str(), false);
+        value_s("language", whisper_lang_str(whisper_full_lang_id(ctx)), false);
+
+        start_arr("segments");
+
+            const int n_segments = whisper_full_n_segments(ctx);
+            for (int i = 0; i < n_segments; ++i) {
+                const char * text = whisper_full_get_segment_text(ctx, i);
+                const int64_t t0 = whisper_full_get_segment_t0(ctx, i);
+                const int64_t t1 = whisper_full_get_segment_t1(ctx, i);
+
+                //if()
+
+                start_obj(nullptr);
+                    value_i("id", i, false);
+                    value_f("start", t0 * 0.01, false);
+                    value_f("end", t1 * 0.01, false);
+                    value_s("text", text, false);
+                    
+                    start_arr("words");
+
+                    string word_str = std::string("");
+                    float word_start = 0.0;
+                    float word_end = 0.0;
+                    float p_mean = 0.0;
+                    int cnt = 1;
+
+                    //-------- TEST CONFIDENCE --------
+                    for (int j = 0; j < whisper_full_n_tokens(ctx, i); ++j) {
+                        if (params.print_special == false) {
+                            const whisper_token id = whisper_full_get_token_id(ctx, i, j);
+                            if (id >= whisper_token_eot(ctx)) {
+                                continue;
+                            }
+                        }
+
+                        const char * token = whisper_full_get_token_text(ctx, i, j);
+                        const float  p    = whisper_full_get_token_p   (ctx, i, j);
+                        const float tt0 = whisper_full_get_token_t0(ctx, i, j) * 0.01;
+                        const float tt1 = whisper_full_get_token_t1(ctx, i, j) * 0.01;
+
+                        string txt_tkn = std::string(token);
+
+                        //const int col = std::max(0, std::min((int) k_colors.size() - 1, (int) (std::pow(p, 3)*float(k_colors.size()))));
+                        
+                        // check and join words
+                        //if(txt_tkn.find(' ')>=0){
+                        
+                        if(token[0]==' '){
+                            if(word_str== ""){
+                                cnt=1;
+                                p_mean = p;
+                                word_start = tt0;
+                                word_end = tt1;
+                                word_str = regex_replace(txt_tkn, regex(" "), "");
+                            }else{
+                                start_obj(nullptr);
+                                    value_f("confidence", p_mean/cnt, false);
+                                    value_f("start", word_start, false);
+                                    value_f("end", word_end, false);
+                                    value_s("text", word_str.c_str(), true);
+                                end_obj(false);
+
+                                cnt=1;
+                                p_mean = p;
+                                word_start = tt0;
+                                word_end = tt1;
+                                word_str = regex_replace(txt_tkn, regex(" "), "");
+                            }
+                        }else{
+                            cnt++;
+                            p_mean += p;
+                            word_end = tt1;
+                            word_str += txt_tkn;
+                        }
+
+                        //printf("%s -> %s\n", word_str.c_str(), txt_tkn.find(' '));
+
+                        /* start_obj(nullptr);
+                            value_i("PRINT", txt_tkn.find(' '), false);
+                            value_s("TT", regex_replace(txt_tkn, regex(" "), "EE").c_str(), false);
+                            value_f("confidence", p, false);
+                            value_f("start", tt0, false);
+                            value_f("end", tt1, false);
+                            value_s("text", token, true);
+                        end_obj(true); */
+
+                    }
+
+                    start_obj(nullptr);
+                        value_f("confidence", p_mean/++cnt, false);
+                        value_f("start", word_start, false);
+                        value_f("end", word_end, false);
+                        value_s("text", word_str.c_str(), true);
+                    end_obj(true);
+                    end_arr(true);
+                    
+                    //-------- TEST CONFIDENCE --------
+                    
+
+                    /* if (params.diarize && pcmf32s.size() == 2) {
+                        value_s("speaker", estimate_diarization_speaker(pcmf32s, t0, t1, true).c_str(), true);
+                    } */
+
+                end_obj(i == (n_segments - 1));
+            }
+
+        end_arr(true);
+    end_obj(true);
+    return true;
+}
+
+
+
 
 // karaoke video generation
 // outputs a bash script that uses ffmpeg to generate a video with the subtitles
@@ -933,6 +1261,12 @@ int main(int argc, char ** argv) {
             if (params.output_lrc) {
                 const auto fname_lrc = fname_out + ".lrc";
                 output_lrc(ctx, fname_lrc.c_str(), params, pcmf32s);
+            }
+
+            // output to JSON file
+            if (params.output_jsn_detailed) {
+                const auto fname_jsn = fname_out + ".json";
+                output_json_detailed(ctx, fname_jsn.c_str(), params, pcmf32s);
             }
         }
     }
